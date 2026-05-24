@@ -14,12 +14,13 @@ from umi_log import logger
 # 导入本模块内定义的控制器类
 from .BatchOCR import BatchOCR
 from .BatchDOC import BatchDOC
+from .ImageSearch import ImageSearch
 from .ScreenshotOCR import ScreenshotOCR
 from .QRCode import QRCode
 from ..utils.call_func import CallFunc
 
 # 控制器类列表
-PageClass = [BatchOCR, ScreenshotOCR, QRCode, BatchDOC]
+PageClass = [BatchOCR, ImageSearch, ScreenshotOCR, QRCode, BatchDOC]
 
 
 TagPageConnObj = None  # 记录实例

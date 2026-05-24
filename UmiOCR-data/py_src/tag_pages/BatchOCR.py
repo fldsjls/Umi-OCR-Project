@@ -9,6 +9,7 @@ from umi_log import logger
 from .page import Page  # 页基类
 from ..mission.mission_ocr import MissionOCR  # 任务管理器
 from ..utils.utils import allowedFileName
+from ..utils.ocr_index import OcrIndex
 from ..ocr.output import Output  # 输出器
 
 
@@ -156,6 +157,8 @@ class BatchOCR(Page):
                 o.print(res)
             except Exception:
                 logger.error(f"结果输出失败：{o}", exc_info=True, stack_info=True)
+        # 写入本地OCR索引，用于按文字搜索图片。
+        OcrIndex.index_result(res)
         # 通知qml更新UI
         self.callQmlInMain("onOcrGet", msn["path"], res)  # 在主线程中调用qml
 

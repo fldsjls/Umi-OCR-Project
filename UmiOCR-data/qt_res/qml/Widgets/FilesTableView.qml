@@ -31,6 +31,7 @@ Item {
     property int spacing: size_.smallLine // 表项水平间隔
     property int minWidth0: size_.smallLine * 5 // 第0列最小宽度
     property bool isLock: false // 是否锁定UI操作
+    property bool showOpenButton: true
 
 
     // ========================= 【调用接口】 =========================
@@ -251,7 +252,7 @@ Item {
                 // 左打开图片按钮
                 IconTextButton {
                     id: openBtn
-                    visible: parent.width > openBtn.width + clearBtn.width // 容器宽度过小时隐藏
+                    visible: showOpenButton && parent.width > openBtn.width + clearBtn.width // 容器宽度过小时隐藏
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom

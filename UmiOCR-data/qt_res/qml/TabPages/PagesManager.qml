@@ -32,6 +32,12 @@ Item {
                 + " `jpg, jpe, jpeg, jfif, png, webp, bmp, tif, tiff`",
         },
         {
+            key: "ImageSearch",
+            needController: true,
+            title: qsTr("图片搜索"),
+            intro: qsTr("# 图片搜索\n\n按批量OCR后的文字搜索本地图片。"),
+        },
+        {
             key: "BatchDOC",
             needController: true,
             title: qsTr("批量文档"),
