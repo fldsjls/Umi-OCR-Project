@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 import ".."
+import "../ImageSearch"
 import "../../Widgets"
 import "../../Widgets/ResultLayout"
 import "../../Widgets/IgnoreArea"
@@ -54,7 +55,7 @@ TabPage {
         msnID = tabPage.callPy("msnPaths", paths, argd)
         // 若tabPanel面板的下标没有变化过，则切换到记录页
         if(tabPanel.indexChangeNum < 2)
-            tabPanel.currentIndex = 1
+            tabPanel.currentIndex = 2
         ctrlPanel.runFinished(msnLength)
     }
 
@@ -127,6 +128,7 @@ TabPage {
         // 提取文字，添加到结果表格
         res.title = res.fileName
         resultsTableView.addOcrResult(res)
+        imageSearchPanel.markDirty(tabPanel.currentIndex === 1)
         ctrlPanel.msnStep(1) // 任务计数器步进
     }
 
@@ -265,8 +267,19 @@ TabPage {
                 anchors.margins: size_.spacing
                 isMenuTop: doubleLayout.isRow // 左右布局时，菜单在顶部；上下布局时菜单在底部
                 menuHeight: size_.line * 2
+                onCurrentIndexChanged: {
+                    if(currentIndex === 1)
+                        imageSearchPanel.searchNow()
+                }
 
                 // 结果面板
+                ImageSearchPanel {
+                    id: imageSearchPanel
+                    anchors.fill: parent
+                    visible: false
+                    page: tabPage
+                }
+
                 ResultsTableView {
                     id: resultsTableView
                     anchors.fill: parent
@@ -278,6 +291,11 @@ TabPage {
                         "key": "configs",
                         "title": qsTr("设置"),
                         "component": configsComp.panelComponent,
+                    },
+                    {
+                        "key": "imageSearch",
+                        "title": qsTr("搜索"),
+                        "component": imageSearchPanel,
                     },
                     {
                         "key": "ocrResult",

@@ -1,5 +1,5 @@
 // ==============================================
-// =============== 图片文字搜索 ==================
+// =============== 图片文字搜索面板 ==============
 // ==============================================
 
 import QtQuick 2.15
@@ -9,28 +9,39 @@ import ".."
 import "../BatchOCR"
 import "../../Widgets"
 
-TabPage {
-    id: tabPage
+Item {
+    id: searchPanel
+    anchors.fill: parent
 
+    property var page: undefined
     property int indexCount: 0
     property int resultCount: 0
+    property bool pendingRefresh: false
 
     Component.onCompleted: {
         // 等待子表格完成初始化，避免首次加载时 headerKey 仍为空。
         Qt.callLater(searchNow)
     }
 
+    function callPagePy(funcName, ...args) {
+        if(page && typeof page.callPy === "function")
+            return page.callPy(funcName, ...args)
+        console.error("图片搜索缺少页面控制器", funcName)
+        return undefined
+    }
+
     function refreshStats() {
-        const info = tabPage.callPy("stats")
+        const info = callPagePy("stats")
         indexCount = info ? info.count : 0
         countText.text = qsTr("已索引 %1 张，当前 %2 条").arg(indexCount).arg(resultCount)
     }
 
     function searchNow() {
-        const rows = tabPage.callPy("search", keywordField.text, 300)
+        const rows = callPagePy("search", keywordField.text, 300)
         resultsTable.clear()
         if(!rows) {
             resultCount = 0
+            pendingRefresh = false
             refreshStats()
             return
         }
@@ -38,7 +49,19 @@ TabPage {
             resultsTable.add(rows[i])
         }
         resultCount = rows.length
+        pendingRefresh = false
         refreshStats()
+    }
+
+    function markDirty(refreshNow=false) {
+        pendingRefresh = true
+        if(refreshNow)
+            searchNow()
+    }
+
+    function refreshPending() {
+        if(pendingRefresh)
+            searchNow()
     }
 
     function path2name(path) {

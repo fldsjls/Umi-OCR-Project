@@ -131,6 +131,12 @@ class BatchOCR(Page):
         msnList = [{"path": path}]
         self.msnID = MissionOCR.addMissionList(msnInfo, msnList)
 
+    def search(self, keyword="", limit=200):
+        return OcrIndex.search(keyword, limit)
+
+    def stats(self):
+        return OcrIndex.stats()
+
     # ========================= 【任务控制器的异步回调】 =========================
 
     def _onStart(self, msnInfo):  # 任务队列开始
