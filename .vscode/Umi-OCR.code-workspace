@@ -35,6 +35,17 @@
         "[python]": {
             "editor.defaultFormatter": "ms-python.black-formatter"
         },
+        "python.defaultInterpreterPath": "${workspaceFolder}/UmiOCR-data/runtime/python.exe",
+        "python.autoComplete.extraPaths": [
+            "${workspaceFolder}/UmiOCR-data/site-packages",
+            "${workspaceFolder}/UmiOCR-data/py_src",
+            "${workspaceFolder}/UmiOCR-data/py_src/imports"
+        ],
+        "python.analysis.extraPaths": [
+            "${workspaceFolder}/UmiOCR-data/site-packages",
+            "${workspaceFolder}/UmiOCR-data/py_src",
+            "${workspaceFolder}/UmiOCR-data/py_src/imports"
+        ],
         "python.formatting.provider": "none"
     }
 }

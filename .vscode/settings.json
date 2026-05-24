@@ -1,12 +1,15 @@
 {
+    "python.defaultInterpreterPath": "${workspaceFolder}/UmiOCR-data/runtime/python.exe",
     // 指定第三方库的代码提示和自动补全
     "python.autoComplete.extraPaths": [
-        "./UmiOCR-data/site-packages",
-        "./UmiOCR-data/py_src/imports",
+        "${workspaceFolder}/UmiOCR-data/site-packages",
+        "${workspaceFolder}/UmiOCR-data/py_src",
+        "${workspaceFolder}/UmiOCR-data/py_src/imports",
     ],
     "python.analysis.extraPaths": [
-        "./UmiOCR-data/site-packages",
-        "./UmiOCR-data/py_src/imports",
+        "${workspaceFolder}/UmiOCR-data/site-packages",
+        "${workspaceFolder}/UmiOCR-data/py_src",
+        "${workspaceFolder}/UmiOCR-data/py_src/imports",
     ],
     "editor.suggest.showWords": true,
     "cmake.configureOnOpen": false,
