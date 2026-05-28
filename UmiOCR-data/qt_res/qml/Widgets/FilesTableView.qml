@@ -404,6 +404,7 @@ Item {
         return paths
     }
     function selectedFilesClipboard(isCut=false) {
+        const rows = selectedIndexes()
         const paths = selectedImagePaths()
         if(paths.length <= 0) {
             qmlapp.popup.simple(qsTr("文件：无选中文件"), "")
@@ -421,7 +422,11 @@ Item {
         else
             res = qmlapp.imageManager.copyImage(paths[0])
         if(res && res.startsWith("[Success]"))
+        {
+            if(isCut)
+                removeRowsByIndexes(rows)
             qmlapp.popup.simple(isCut ? qsTr("文件：剪切%1个").arg(paths.length) : qsTr("文件：复制%1个").arg(paths.length), "")
+        }
         else
             qmlapp.popup.simple(isCut ? qsTr("剪切文件失败") : qsTr("复制文件失败"), res)
     }

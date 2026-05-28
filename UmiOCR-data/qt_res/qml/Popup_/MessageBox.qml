@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 import QtGraphicalEffects 1.15 // 阴影
 
 import "../Widgets"
@@ -23,6 +24,7 @@ Rectangle {
     property string icon: "bell" // 图标
     property string iconColorKey: "specialTextColor" // 图标前景颜色
     property string iconBgColorKey: "coverColor1" // 图标背景颜色
+    property int maxMsgHeight: Math.max(size_.line * 5, Screen.height - size_.line * 12)
     property var btnsList: [ // 按钮列表
         // text 显示文本， value 点击返回的值， textColor 文本颜色， bgColor 背景颜色
         {"text":qsTr("取消"), "value": false, "textColor": theme.subTextColor, "bgColor": theme.bgColor},
@@ -66,6 +68,7 @@ Rectangle {
         }
         // 图标
         Rectangle {
+            id: iconRect
             width: size_.line*3
             height: size_.line*3
             anchors.horizontalCenter: parent.horizontalCenter
@@ -79,6 +82,15 @@ Rectangle {
                 color: theme[iconColorKey]
                 icon: msgRoot.icon
             }
+            MouseArea {
+                anchors.fill: parent
+                visible: type === "error"
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if(typeof onClosed === "function")
+                        onClosed(false)
+                }
+            }
         }
         // 标题
         Text_ {
@@ -89,15 +101,33 @@ Rectangle {
             text: title
         }
         // 内容
-        Text_ {
-            id: textMsg
+        Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: size_.line
-            wrapMode: TextEdit.Wrap // 尽量在单词边界处换行
-            horizontalAlignment: Text.AlignHCenter // 水平居中
             visible: msg!==""
-            text: msg
+            height: visible ? Math.min(textMsg.implicitHeight, maxMsgHeight) : 0
+
+            Flickable {
+                id: msgFlick
+                anchors.fill: parent
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: width
+                contentHeight: textMsg.implicitHeight
+
+                Text_ {
+                    id: textMsg
+                    width: msgFlick.width
+                    wrapMode: TextEdit.Wrap // 尽量在单词边界处换行
+                    horizontalAlignment: Text.AlignHCenter // 水平居中
+                    text: msg
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    visible: msgFlick.contentHeight > msgFlick.height
+                }
+            }
         }
         // 下层小按钮
         Item {
@@ -191,6 +221,21 @@ Rectangle {
                 height: msgRoot.height
                 radius: msgRoot.radius
             }
+        }
+    }
+
+    IconButton {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: size_.smallSpacing
+        width: size_.line
+        height: size_.line
+        icon_: "clear"
+        color: theme.subTextColor
+        toolTip: qsTr("关闭")
+        onClicked: {
+            if(typeof onClosed === "function")
+                onClosed(false)
         }
     }
 

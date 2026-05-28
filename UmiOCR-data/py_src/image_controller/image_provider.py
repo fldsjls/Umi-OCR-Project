@@ -5,6 +5,7 @@
 import os
 import struct
 import ctypes
+from ctypes import wintypes
 from uuid import uuid4  # 唯一ID
 from urllib.parse import unquote
 from PySide2.QtCore import Qt, QByteArray, QBuffer, QUrl, QMimeData, QFile
@@ -249,15 +250,19 @@ def cutImages(paths):
 def _moveToTrashWin(path):
     class SHFILEOPSTRUCTW(ctypes.Structure):
         _fields_ = [
-            ("hwnd", ctypes.c_void_p),
-            ("wFunc", ctypes.c_uint),
-            ("pFrom", ctypes.c_wchar_p),
-            ("pTo", ctypes.c_wchar_p),
-            ("fFlags", ctypes.c_uint16),
-            ("fAnyOperationsAborted", ctypes.c_bool),
-            ("hNameMappings", ctypes.c_void_p),
-            ("lpszProgressTitle", ctypes.c_wchar_p),
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", wintypes.WORD),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", wintypes.LPVOID),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
         ]
+
+    shell_file_operation = ctypes.windll.shell32.SHFileOperationW
+    shell_file_operation.argtypes = [ctypes.POINTER(SHFILEOPSTRUCTW)]
+    shell_file_operation.restype = ctypes.c_int
 
     op = SHFILEOPSTRUCTW()
     op.wFunc = 3  # FO_DELETE
