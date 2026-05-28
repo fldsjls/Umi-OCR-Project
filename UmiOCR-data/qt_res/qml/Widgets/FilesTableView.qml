@@ -491,6 +491,8 @@ Item {
                 return
             const res = qmlapp.imageManager.deleteImages(paths)
             if(res && res.ok) {
+                if(!deleteRecordsFromIndex(paths))
+                    return
                 removeRowsByIndexes(rows)
                 const n = res.deleted ? res.deleted.length : paths.length
                 qmlapp.popup.simple(qsTr("文件：删除%1个").arg(n), "")
