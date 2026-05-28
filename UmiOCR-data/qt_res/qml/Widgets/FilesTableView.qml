@@ -50,6 +50,9 @@ Item {
     property real dragStartY: 0
     property real dragCurrentX: 0
     property real dragCurrentY: 0
+    property real dragStartContentY: 0
+    property real dragCurrentContentY: 0
+    property real dragPointerY: 0
     property int dragStartRow: -1
     property int dragModifiers: 0
     property var dragBaseRows: ({})
@@ -412,6 +415,14 @@ Item {
     function tableRowStep() {
         return Math.max(1, size_.smallLine * 1.5 + tableView.rowSpacing)
     }
+    function tableContentHeight() {
+        if(rowCount <= 0)
+            return 0
+        return rowCount * tableRowStep() - tableView.rowSpacing
+    }
+    function tableMaxContentY() {
+        return Math.max(0, tableContentHeight() - tableView.height)
+    }
     function rowAtTableY(y, clamp=true) {
         if(rowCount <= 0)
             return -1
@@ -423,7 +434,7 @@ Item {
     function isPointOnTableRow(y) {
         if(rowCount <= 0 || y < 0)
             return false
-        const contentBottom = rowCount * tableRowStep() - tableView.contentY - tableView.rowSpacing
+        const contentBottom = tableContentHeight() - tableView.contentY
         return y < contentBottom
     }
     function clampTablePoint(point) {
@@ -447,15 +458,18 @@ Item {
         bumpSelectionUpdate()
     }
     function selectDragRectRows(fromY, toY) {
+        selectDragContentRows(tableView.contentY + fromY, tableView.contentY + toY)
+    }
+    function selectDragContentRows(fromContentY, toContentY) {
         if(rowCount <= 0)
             return
         const keepExisting = (dragModifiers & Qt.ControlModifier) !== 0
         const next = keepExisting ? copySelectionMap(dragBaseRows) : {}
         const step = tableRowStep()
-        const rectTop = tableView.contentY + Math.min(fromY, toY)
-        const rectBottom = tableView.contentY + Math.max(fromY, toY)
+        const rectTop = Math.min(fromContentY, toContentY)
+        const rectBottom = Math.max(fromContentY, toContentY)
         const contentTop = 0
-        const contentBottom = rowCount * step
+        const contentBottom = tableContentHeight()
         const overlapTop = Math.max(contentTop, rectTop)
         const overlapBottom = Math.min(contentBottom, rectBottom)
         if(overlapTop < overlapBottom) {
@@ -468,6 +482,30 @@ Item {
         }
         selectedRows = next
         bumpSelectionUpdate()
+    }
+    function dragStartViewY() {
+        return Math.max(0, Math.min(tableView.height, dragStartContentY - tableView.contentY))
+    }
+    function updateDragAutoScroll() {
+        if(!dragSelecting || dragStartRow < 0) {
+            dragAutoScrollTimer.stop()
+            return
+        }
+        const edge = Math.max(16, size_.smallLine)
+        const needScroll = (dragPointerY < edge && tableView.contentY > 0) ||
+            (dragPointerY > tableView.height - edge && tableView.contentY < tableMaxContentY())
+        if(needScroll && !dragAutoScrollTimer.running)
+            dragAutoScrollTimer.start()
+        else if(!needScroll)
+            dragAutoScrollTimer.stop()
+    }
+    function refreshDragSelection() {
+        if(!dragSelectMoved)
+            return
+        dragSelecting = true
+        dragCurrentContentY = tableView.contentY + dragCurrentY
+        selectDragContentRows(dragStartContentY, dragCurrentContentY)
+        updateDragAutoScroll()
     }
     function handleSelectionPressed(row, item, mouse) {
         if(!enableSelection || row < 0 || row >= rowCount)
@@ -502,6 +540,8 @@ Item {
         const point = clampTablePoint(item.mapToItem(tableView, mouse.x, mouse.y))
         dragStartX = dragCurrentX = point.x
         dragStartY = dragCurrentY = point.y
+        dragStartContentY = dragCurrentContentY = tableView.contentY + point.y
+        dragPointerY = point.y
         dragStartRow = row
         dragModifiers = modifiers
         dragBaseRows = copySelectionMap(selectedRows)
@@ -522,6 +562,8 @@ Item {
                 clearSelection()
             dragStartX = dragCurrentX = point.x
             dragStartY = dragCurrentY = point.y
+            dragStartContentY = dragCurrentContentY = tableView.contentY + point.y
+            dragPointerY = mouse.y
             dragStartRow = rowAtTableY(mouse.y)
             dragModifiers = mouse.modifiers || 0
             dragBaseRows = copySelectionMap(selectedRows)
@@ -549,20 +591,20 @@ Item {
     function handleSelectionMoved(item, mouse) {
         if(!enableSelection || dragStartRow < 0)
             return
-        const point = clampTablePoint(item.mapToItem(tableView, mouse.x, mouse.y))
+        const rawPoint = item.mapToItem(tableView, mouse.x, mouse.y)
+        const point = clampTablePoint(rawPoint)
         dragCurrentX = point.x
         dragCurrentY = point.y
+        dragPointerY = rawPoint.y
         if(!dragSelectMoved) {
-            const dx = dragCurrentX - dragStartX
-            const dy = dragCurrentY - dragStartY
+            const dx = rawPoint.x - dragStartX
+            const dy = rawPoint.y - dragStartY
             dragSelectMoved = Math.sqrt(dx * dx + dy * dy) > 4
         }
-        if(dragSelectMoved) {
-            dragSelecting = true
-            selectDragRectRows(dragStartY, dragCurrentY)
-        }
+        refreshDragSelection()
     }
     function handleSelectionReleased() {
+        dragAutoScrollTimer.stop()
         dragSelecting = false
         dragSelectMoved = false
         dragStartRow = -1
@@ -578,6 +620,38 @@ Item {
             return
         if(mouse.button === Qt.LeftButton)
             activateRow(row)
+    }
+
+    Timer {
+        id: dragAutoScrollTimer
+        interval: 16
+        repeat: true
+        onTriggered: {
+            if(!dragSelecting || dragStartRow < 0) {
+                stop()
+                return
+            }
+            const edge = Math.max(16, size_.smallLine)
+            let delta = 0
+            if(dragPointerY < edge)
+                delta = -Math.max(3, (edge - dragPointerY) / edge * tableRowStep())
+            else if(dragPointerY > tableView.height - edge)
+                delta = Math.max(3, (dragPointerY - (tableView.height - edge)) / edge * tableRowStep())
+            if(delta === 0) {
+                stop()
+                return
+            }
+            const nextY = Math.max(0, Math.min(tableMaxContentY(), tableView.contentY + delta))
+            if(nextY === tableView.contentY) {
+                stop()
+                return
+            }
+            tableView.contentY = nextY
+            dragCurrentY = Math.max(0, Math.min(tableView.height, dragPointerY))
+            dragCurrentContentY = tableView.contentY + dragCurrentY
+            selectDragContentRows(dragStartContentY, dragCurrentContentY)
+            updateDragAutoScroll()
+        }
     }
 
     // 宽度更新
@@ -887,9 +961,9 @@ Item {
                 visible: enableSelection && dragSelecting
                 Rectangle {
                     x: Math.min(dragStartX, dragCurrentX)
-                    y: Math.min(dragStartY, dragCurrentY)
+                    y: Math.min(dragStartViewY(), dragCurrentY)
                     width: Math.abs(dragCurrentX - dragStartX)
-                    height: Math.abs(dragCurrentY - dragStartY)
+                    height: Math.abs(dragCurrentY - dragStartViewY())
                     color: theme.coverColor2
                     opacity: 0.45
                     border.width: 1
