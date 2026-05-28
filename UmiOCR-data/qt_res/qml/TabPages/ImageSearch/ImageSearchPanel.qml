@@ -69,11 +69,6 @@ Item {
         return parts[parts.length - 1]
     }
 
-    function shortText(text) {
-        const value = String(text || "")
-        return value.length > 80 ? value.slice(0, 80) + "..." : value
-    }
-
     function openResult(index) {
         const row = resultsTable.get(index)
         let data = undefined
@@ -155,12 +150,14 @@ Item {
             anchors.margins: size_.spacing
             anchors.topMargin: size_.smallSpacing
             showOpenButton: false
+            showClearButton: false
+            enableSelection: true
             clearBtnText: qsTr("清空")
             defaultTips: qsTr("暂无结果")
             headers: [
                 {key: "path", title: qsTr("图片"), left: true, display: path2name,
                     btn: true, onClicked: openResult},
-                {key: "snippet", title: qsTr("匹配文字"), left: true, display: shortText},
+                {key: "snippet", title: qsTr("匹配文字"), left: true, toolTipKey: "text"},
                 {key: "score", title: qsTr("置信度"), display: function(v){ return Number(v).toFixed(2) }},
                 {key: "indexedAt", title: qsTr("识别时间")},
             ]

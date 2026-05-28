@@ -32,6 +32,27 @@ Item {
     property int minWidth0: size_.smallLine * 5 // 第0列最小宽度
     property bool isLock: false // 是否锁定UI操作
     property bool showOpenButton: true
+    property bool showClearButton: true
+    property bool autoElide: true
+    property bool showCellToolTip: true
+    property bool enableColumnResize: true
+    property int minColumnWidth: size_.smallLine * 3
+    property real maxAutoColumnWidthRatio: 0.45
+    property bool enableSelection: false
+    property string copyImageKey: "path"
+    property int selectionUpdate: 0
+    property int lastSelectedIndex: -1
+    property int anchorIndex: -1
+    property var selectedRows: ({})
+    property bool dragSelecting: false
+    property bool dragSelectMoved: false
+    property real dragStartX: 0
+    property real dragStartY: 0
+    property real dragCurrentX: 0
+    property real dragCurrentY: 0
+    property int dragStartRow: -1
+    property int dragModifiers: 0
+    property var dragBaseRows: ({})
 
 
     // ========================= 【调用接口】 =========================
@@ -76,6 +97,7 @@ Item {
     function clear() {
         dataModel.clear()
         dataDict = {}
+        clearSelection()
     }
     // 改：属性字典
     function set(ik, columnDict) {
@@ -150,6 +172,19 @@ Item {
     signal addPaths(var paths) // 添加文件的信号
     signal click(var info) // 点击条目的信号
 
+    Keys.onPressed: {
+        if(enableSelection) {
+            if((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_A) {
+                selectAllRows()
+                event.accepted = true
+            }
+            else if((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_C) {
+                copySelectedImages()
+                event.accepted = true
+            }
+        }
+    }
+
     Component.onCompleted: {
         dataDict = {}
         columnCount = headers.length
@@ -158,6 +193,7 @@ Item {
                 "key": headers[i].key,
                 "title": headers[i].title,
                 "width": 1,
+                "userWidth": -1,
             })
         }
         headerKey = headers[0].key
@@ -176,6 +212,305 @@ Item {
     property var dataDict: {} // 指向 dataModel 的 index
     onRowCountChanged: {
         headerModel.setProperty(0, "title", headers[0].title + ` (${rowCount})`)
+    }
+
+    function toDisplayString(value) {
+        if(value === undefined || value === null)
+            return ""
+        return String(value)
+    }
+    function getCellText(row, header) {
+        if(!header)
+            return ""
+        const value = row[header.key]
+        return toDisplayString(header.display ? header.display(value, row) : value)
+    }
+    function getCellToolTipText(row, header, displayText) {
+        if(!header)
+            return displayText
+        if(header.toolTipDisplay)
+            return toDisplayString(header.toolTipDisplay(row[header.key], row))
+        if(header.toolTipKey && row[header.toolTipKey] !== undefined)
+            return toDisplayString(row[header.toolTipKey])
+        return toDisplayString(row[header.key] !== undefined ? row[header.key] : displayText)
+    }
+    function getColumnMinWidth(column) {
+        const header = headers[column]
+        if(header && header.minWidth !== undefined)
+            return Math.max(1, header.minWidth)
+        return column === 0 ? minWidth0 : minColumnWidth
+    }
+    function getColumnMaxAutoWidth(column) {
+        const header = headers[column]
+        const minWidth = getColumnMinWidth(column)
+        if(header && header.maxWidth !== undefined)
+            return Math.max(minWidth, header.maxWidth)
+        if(tableArea.width <= 0)
+            return 999999
+        return Math.max(minWidth, tableArea.width * maxAutoColumnWidthRatio)
+    }
+    function setColumnUserWidth(column, width) {
+        if(column < 0 || column >= columnCount)
+            return
+        const w = Math.max(getColumnMinWidth(column), width)
+        headerModel.setProperty(column, "userWidth", w)
+        headerModel.setProperty(column, "width", w)
+    }
+    function resetColumnUserWidth(column) {
+        if(column < 0 || column >= columnCount)
+            return
+        headerModel.setProperty(column, "userWidth", -1)
+        updateWidth(true)
+    }
+    function resizeColumnPair(column, dx, leftStartWidth, rightStartWidth) {
+        if(column < 0 || column >= columnCount - 1)
+            return
+        const rightColumn = column + 1
+        const leftMin = getColumnMinWidth(column)
+        const rightMin = getColumnMinWidth(rightColumn)
+        const total = leftStartWidth + rightStartWidth
+        let leftWidth = leftStartWidth + dx
+        let rightWidth = rightStartWidth - dx
+        if(leftWidth < leftMin) {
+            leftWidth = leftMin
+            rightWidth = total - leftWidth
+        }
+        if(rightWidth < rightMin) {
+            rightWidth = rightMin
+            leftWidth = total - rightWidth
+        }
+        if(column === 0) {
+            setColumnUserWidth(rightColumn, rightWidth)
+            updateWidth0()
+        }
+        else {
+            setColumnUserWidth(column, leftWidth)
+            setColumnUserWidth(rightColumn, rightWidth)
+        }
+    }
+
+    function bumpSelectionUpdate() {
+        selectionUpdate++
+        if(selectionUpdate > 100000)
+            selectionUpdate = 0
+    }
+    function isRowSelected(row) {
+        selectionUpdate
+        return selectedRows[row] === true
+    }
+    function clearSelection() {
+        selectedRows = {}
+        lastSelectedIndex = -1
+        anchorIndex = -1
+        bumpSelectionUpdate()
+    }
+    function selectSingleRow(row) {
+        if(row < 0 || row >= rowCount)
+            return
+        selectedRows = {}
+        selectedRows[row] = true
+        lastSelectedIndex = row
+        anchorIndex = row
+        bumpSelectionUpdate()
+    }
+    function selectAllRows() {
+        selectedRows = {}
+        for(let i = 0; i < rowCount; i++)
+            selectedRows[i] = true
+        if(rowCount > 0) {
+            lastSelectedIndex = rowCount - 1
+            if(anchorIndex < 0)
+                anchorIndex = 0
+        }
+        bumpSelectionUpdate()
+    }
+    function copySelectionMap(source) {
+        const target = {}
+        for(let key in source) {
+            if(source[key])
+                target[key] = true
+        }
+        return target
+    }
+    function toggleRowSelection(row) {
+        if(row < 0 || row >= rowCount)
+            return
+        const next = copySelectionMap(selectedRows)
+        if(next[row])
+            delete next[row]
+        else
+            next[row] = true
+        selectedRows = next
+        lastSelectedIndex = row
+        anchorIndex = row
+        bumpSelectionUpdate()
+    }
+    function selectRangeRows(fromRow, toRow, keepExisting=false) {
+        if(rowCount <= 0)
+            return
+        const a = Math.max(0, Math.min(rowCount - 1, fromRow))
+        const b = Math.max(0, Math.min(rowCount - 1, toRow))
+        const left = Math.min(a, b)
+        const right = Math.max(a, b)
+        const next = keepExisting ? copySelectionMap(selectedRows) : {}
+        for(let i = left; i <= right; i++)
+            next[i] = true
+        selectedRows = next
+        lastSelectedIndex = toRow
+        if(anchorIndex < 0)
+            anchorIndex = fromRow
+        bumpSelectionUpdate()
+    }
+    function selectedIndexes() {
+        const rows = []
+        for(let key in selectedRows) {
+            if(selectedRows[key]) {
+                const row = Number(key)
+                if(row >= 0 && row < rowCount)
+                    rows.push(row)
+            }
+        }
+        rows.sort(function(a, b){ return a - b })
+        return rows
+    }
+    function selectedImagePaths() {
+        const rows = selectedIndexes()
+        const paths = []
+        for(let i = 0; i < rows.length; i++) {
+            const row = dataModel.get(rows[i])
+            if(row && row[copyImageKey])
+                paths.push(row[copyImageKey])
+        }
+        return paths
+    }
+    function copySelectedImages() {
+        const paths = selectedImagePaths()
+        if(paths.length <= 0) {
+            qmlapp.popup.simple(qsTr("图片：无选中图片"), "")
+            return
+        }
+        let res = ""
+        if(paths.length === 1)
+            res = qmlapp.imageManager.copyImage(paths[0])
+        else if(qmlapp.imageManager.copyImages)
+            res = qmlapp.imageManager.copyImages(paths)
+        else
+            res = qmlapp.imageManager.copyImage(paths[0])
+        if(res && res.startsWith("[Success]"))
+            qmlapp.popup.simple(qsTr("图片：复制%1张").arg(paths.length), "")
+        else
+            qmlapp.popup.simple(qsTr("复制图片失败"), res)
+    }
+    function activateRow(row) {
+        if(row < 0 || row >= rowCount)
+            return
+        for(let i = 0; i < headers.length; i++) {
+            if(headers[i].onClicked) {
+                headers[i].onClicked(row)
+                return
+            }
+        }
+    }
+    function tableRowStep() {
+        return Math.max(1, size_.smallLine * 1.5 + tableView.rowSpacing)
+    }
+    function rowAtTableY(y) {
+        if(rowCount <= 0)
+            return -1
+        const row = Math.floor((tableView.contentY + y) / tableRowStep())
+        return Math.max(0, Math.min(rowCount - 1, row))
+    }
+    function clampTablePoint(point) {
+        return {
+            "x": Math.max(0, Math.min(tableView.width, point.x)),
+            "y": Math.max(0, Math.min(tableView.height, point.y)),
+        }
+    }
+    function selectDragRows(currentRow) {
+        if(dragStartRow < 0 || currentRow < 0)
+            return
+        const keepExisting = (dragModifiers & Qt.ControlModifier) !== 0
+        const next = keepExisting ? copySelectionMap(dragBaseRows) : {}
+        const left = Math.min(dragStartRow, currentRow)
+        const right = Math.max(dragStartRow, currentRow)
+        for(let i = left; i <= right; i++)
+            next[i] = true
+        selectedRows = next
+        lastSelectedIndex = currentRow
+        anchorIndex = dragStartRow
+        bumpSelectionUpdate()
+    }
+    function handleSelectionPressed(row, item, mouse) {
+        if(!enableSelection || row < 0 || row >= rowCount)
+            return
+        forceActiveFocus()
+        const modifiers = mouse.modifiers || 0
+        if(mouse.button === Qt.RightButton) {
+            if(!isRowSelected(row)) {
+                if(modifiers & Qt.ShiftModifier) {
+                    const base = anchorIndex >= 0 ? anchorIndex : (lastSelectedIndex >= 0 ? lastSelectedIndex : row)
+                    selectRangeRows(base, row, (modifiers & Qt.ControlModifier) !== 0)
+                }
+                else if(modifiers & Qt.ControlModifier)
+                    toggleRowSelection(row)
+                else
+                    selectSingleRow(row)
+            }
+            return
+        }
+        if(mouse.button !== Qt.LeftButton)
+            return
+
+        if(modifiers & Qt.ShiftModifier) {
+            const base = anchorIndex >= 0 ? anchorIndex : (lastSelectedIndex >= 0 ? lastSelectedIndex : row)
+            selectRangeRows(base, row, (modifiers & Qt.ControlModifier) !== 0)
+        }
+        else if(modifiers & Qt.ControlModifier)
+            toggleRowSelection(row)
+        else
+            selectSingleRow(row)
+
+        const point = clampTablePoint(item.mapToItem(tableView, mouse.x, mouse.y))
+        dragStartX = dragCurrentX = point.x
+        dragStartY = dragCurrentY = point.y
+        dragStartRow = row
+        dragModifiers = modifiers
+        dragBaseRows = copySelectionMap(selectedRows)
+        dragSelectMoved = false
+        dragSelecting = false
+    }
+    function handleSelectionMoved(item, mouse) {
+        if(!enableSelection || dragStartRow < 0)
+            return
+        const point = clampTablePoint(item.mapToItem(tableView, mouse.x, mouse.y))
+        dragCurrentX = point.x
+        dragCurrentY = point.y
+        if(!dragSelectMoved) {
+            const dx = dragCurrentX - dragStartX
+            const dy = dragCurrentY - dragStartY
+            dragSelectMoved = Math.sqrt(dx * dx + dy * dy) > 4
+        }
+        if(dragSelectMoved) {
+            dragSelecting = true
+            selectDragRows(rowAtTableY(dragCurrentY))
+        }
+    }
+    function handleSelectionReleased() {
+        dragSelecting = false
+        dragSelectMoved = false
+        dragStartRow = -1
+    }
+    function handleSelectionClicked(row, mouse) {
+        if(!enableSelection || row < 0 || row >= rowCount)
+            return
+        if(mouse.button === Qt.RightButton)
+            copySelectedImages()
+    }
+    function handleSelectionDoubleClicked(row, mouse) {
+        if(!enableSelection || row < 0 || row >= rowCount)
+            return
+        if(mouse.button === Qt.LeftButton)
+            activateRow(row)
     }
 
     // 宽度更新
@@ -210,8 +545,11 @@ Item {
         // 赋值 / 计算第0列宽度
         let w0 = tableArea.width
         for(let i = 1; i < columnCount; i++) {
-            headerModel.setProperty(i, "width", ws[i])
-            w0 -= ws[i]
+            const userWidth = headerModel.get(i).userWidth
+            const autoWidth = Math.min(Math.max(getColumnMinWidth(i), ws[i]), getColumnMaxAutoWidth(i))
+            const width = userWidth > 0 ? userWidth : autoWidth
+            headerModel.setProperty(i, "width", width)
+            w0 -= width
         }
         // 更新第0列宽度
         updateWidth0(w0)
@@ -225,7 +563,7 @@ Item {
                 w0 -= headerModel.get(i).width
         }
         w0 += columnCount-10 // 避让右侧滚动条空间
-        if(w0 < minWidth0) w0 = minWidth0
+        if(w0 < getColumnMinWidth(0)) w0 = getColumnMinWidth(0)
         headerModel.setProperty(0, "width", w0)
     }
 
@@ -247,12 +585,12 @@ Item {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: size_.line * 2
+                height: (showOpenButton || showClearButton) ? size_.line * 2 : 0
 
                 // 左打开图片按钮
                 IconTextButton {
                     id: openBtn
-                    visible: showOpenButton && parent.width > openBtn.width + clearBtn.width // 容器宽度过小时隐藏
+                    visible: showOpenButton && parent.width > openBtn.width + (showClearButton ? clearBtn.width : 0) // 容器宽度过小时隐藏
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
@@ -269,6 +607,7 @@ Item {
                 // 右清空按钮
                 IconTextButton {
                     id: clearBtn
+                    visible: showClearButton
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
@@ -301,7 +640,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: size_.line * 1.5
-                onWidthChanged: updateWidth0()
+                onWidthChanged: updateWidth()
 
                 Row {
                     anchors.fill: parent
@@ -316,15 +655,57 @@ Item {
                             color: theme.bgColor
                             border.width: 1
                             border.color: theme.coverColor2
-                            property alias maxWidth: hText.width
+                            clip: true
+                            property real maxWidth: hText.implicitWidth
+                            property int columnIndex: index
                             Text_ {
                                 id: hText
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.fill: parent
+                                anchors.leftMargin: fTableRoot.spacing * 0.5
+                                anchors.rightMargin: fTableRoot.spacing * 0.5
+                                horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter // 垂直居中
                                 font.pixelSize: size_.smallText
+                                elide: fTableRoot.autoElide ? Text.ElideRight : Text.ElideNone
                                 text: model.title
+                            }
+                            MouseArea {
+                                id: headerHoverArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+                            ToolTip_ {
+                                visible: fTableRoot.showCellToolTip && headerHoverArea.containsMouse && hText.truncated
+                                text: model.title
+                            }
+                            MouseArea {
+                                visible: fTableRoot.enableColumnResize && columnIndex < columnCount - 1
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.right: parent.right
+                                width: Math.max(4, size_.smallSpacing)
+                                hoverEnabled: true
+                                cursorShape: Qt.SplitHCursor
+                                property real pressX: 0
+                                property real leftStartWidth: 0
+                                property real rightStartWidth: 0
+                                onPressed: {
+                                    const point = mapToItem(tableArea, mouse.x, mouse.y)
+                                    pressX = point.x
+                                    leftStartWidth = headerModel.get(columnIndex).width
+                                    rightStartWidth = headerModel.get(columnIndex + 1).width
+                                }
+                                onPositionChanged: {
+                                    if(!pressed)
+                                        return
+                                    const point = mapToItem(tableArea, mouse.x, mouse.y)
+                                    resizeColumnPair(columnIndex, point.x - pressX, leftStartWidth, rightStartWidth)
+                                }
+                                onDoubleClicked: {
+                                    resetColumnUserWidth(columnIndex)
+                                    resetColumnUserWidth(columnIndex + 1)
+                                }
                             }
                         }
                     }
@@ -361,13 +742,15 @@ Item {
                                 width: model.width
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                color: theme.bgColor
+                                color: enableSelection && isRowSelected(rowIndex) ? theme.coverColor2 : theme.bgColor
                                 border.width: 1
                                 border.color: theme.coverColor2
-                                property alias maxWidth: hText.width
+                                property real maxWidth: hText.implicitWidth
                                 property int columnIndex: index
                                 property string columnKey: model.key
                                 property var header: headers[columnIndex]
+                                property string displayText: getCellText(rowModel, header)
+                                property string toolTipText: getCellToolTipText(rowModel, header, displayText)
                                 clip: true
                                 Button_ {
                                     visible: header.btn?true:false
@@ -382,16 +765,31 @@ Item {
                                 Text_ {
                                     id: hText
                                     property bool isLeft: headers[columnIndex].left?true:false
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    anchors.left: isLeft? parent.left : undefined
+                                    anchors.fill: parent
                                     anchors.leftMargin: fTableRoot.spacing * 0.5
-                                    anchors.horizontalCenter: isLeft? undefined : parent.horizontalCenter
+                                    anchors.rightMargin: fTableRoot.spacing * 0.5
+                                    horizontalAlignment: isLeft ? Text.AlignLeft : Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter // 垂直居中
                                     font.pixelSize: size_.smallText
+                                    elide: fTableRoot.autoElide ? Text.ElideRight : Text.ElideNone
                                     color: (columnKey != "state"|| typeof rowModel.state != "string" || rowModel.state.length == 0) ? theme.subTextColor : 
                                         (rowModel.state.startsWith("×") ? theme.noColor : (rowModel.state.startsWith("√") ? theme.yesColor : theme.subTextColor))
-                                    text: header.display ? header.display(rowModel[columnKey]) : rowModel[columnKey]
+                                    text: parent.displayText
+                                }
+                                MouseArea {
+                                    id: cellHoverArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: enableSelection ? (Qt.LeftButton | Qt.RightButton) : Qt.NoButton
+                                    onPressed: handleSelectionPressed(rowIndex, cellHoverArea, mouse)
+                                    onPositionChanged: handleSelectionMoved(cellHoverArea, mouse)
+                                    onReleased: handleSelectionReleased()
+                                    onClicked: handleSelectionClicked(rowIndex, mouse)
+                                    onDoubleClicked: handleSelectionDoubleClicked(rowIndex, mouse)
+                                }
+                                ToolTip_ {
+                                    visible: fTableRoot.showCellToolTip && cellHoverArea.containsMouse && hText.truncated
+                                    text: toolTipText
                                 }
                             }
                         }
@@ -399,6 +797,21 @@ Item {
                 }
                 // 滚动条
                 ScrollBar.vertical: ScrollBar { }
+            }
+            Item {
+                anchors.fill: tableView
+                z: 20
+                visible: enableSelection && dragSelecting
+                Rectangle {
+                    x: Math.min(dragStartX, dragCurrentX)
+                    y: Math.min(dragStartY, dragCurrentY)
+                    width: Math.abs(dragCurrentX - dragStartX)
+                    height: Math.abs(dragCurrentY - dragStartY)
+                    color: theme.coverColor2
+                    opacity: 0.45
+                    border.width: 1
+                    border.color: theme.coverColor4
+                }
             }
         }
 

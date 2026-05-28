@@ -5,7 +5,7 @@
 import os
 from uuid import uuid4  # 唯一ID
 from urllib.parse import unquote
-from PySide2.QtCore import Qt, QByteArray, QBuffer
+from PySide2.QtCore import Qt, QByteArray, QBuffer, QUrl, QMimeData
 from PySide2.QtGui import QPixmap, QImage, QPainter, QClipboard
 from PySide2.QtQuick import QQuickImageProvider
 
@@ -177,6 +177,41 @@ def copyImage(path):
         return "[Success]"
     except Exception as e:
         return f"[Error] can't copy: {e}\n{path}"
+
+
+def copyImages(paths):
+    if not isinstance(paths, (list, tuple)):
+        try:
+            paths = list(paths)
+        except TypeError:
+            paths = [paths]
+    paths = [unquote(str(p)) for p in paths if p]
+    if len(paths) <= 0:
+        return "[Error] no image path."
+    if len(paths) == 1:
+        return copyImage(paths[0])
+
+    urls = []
+    valid_paths = []
+    for path in paths:
+        if path.startswith("file:///"):
+            path = path[8:]
+        path = os.path.abspath(path)
+        if os.path.exists(path):
+            urls.append(QUrl.fromLocalFile(path))
+            valid_paths.append(path)
+
+    if len(urls) <= 0:
+        return "[Error] no valid image path."
+
+    try:
+        mime_data = QMimeData()
+        mime_data.setUrls(urls)
+        mime_data.setText("\n".join(valid_paths))
+        Clipboard.setMimeData(mime_data)
+        return f"[Success] {len(urls)}"
+    except Exception as e:
+        return f"[Error] can't copy images: {e}"
 
 
 # 用系统默认应用打开图片

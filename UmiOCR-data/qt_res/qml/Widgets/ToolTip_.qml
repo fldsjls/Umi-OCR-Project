@@ -8,9 +8,17 @@ import QtQuick.Controls 2.15
 
 ToolTip {
     id: rootToolTip
+    property int maxTextWidth: size_.line * 24
 
     delay: 500
     timeout: 0 // 不自动关闭
+
+    TextMetrics {
+        id: contentMetrics
+        text: rootToolTip.text
+        font.family: theme.fontFamily
+        font.pixelSize: size_.smallText
+    }
 
     MouseArea {
         id: mouseArea
@@ -23,6 +31,8 @@ ToolTip {
 
     contentItem: Text { // 前景文字
         text: rootToolTip.text
+        width: Math.min(contentMetrics.width, rootToolTip.maxTextWidth)
+        wrapMode: contentMetrics.width > rootToolTip.maxTextWidth ? Text.WrapAnywhere : Text.NoWrap
         font.family: theme.fontFamily
         font.pixelSize: size_.smallText
         color: theme.textColor
