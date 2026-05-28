@@ -12,3 +12,6 @@ class ImageSearch(Page):
 
     def stats(self):
         return OcrIndex.stats()
+
+    def deleteRecords(self, paths):
+        return OcrIndex.delete_many(paths)

@@ -137,6 +137,9 @@ class BatchOCR(Page):
     def stats(self):
         return OcrIndex.stats()
 
+    def deleteRecords(self, paths):
+        return OcrIndex.delete_many(paths)
+
     # ========================= 【任务控制器的异步回调】 =========================
 
     def _onStart(self, msnInfo):  # 任务队列开始

@@ -210,7 +210,7 @@ def _toLocalPaths(paths):
 def _copyFilesToClipboard(paths, isCut=False):
     paths = _toLocalPaths(paths)
     if len(paths) <= 0:
-        return "[Error] no image path."
+        return "[Error] no file path."
 
     urls = []
     valid_paths = []
@@ -220,7 +220,7 @@ def _copyFilesToClipboard(paths, isCut=False):
             valid_paths.append(path)
 
     if len(urls) <= 0:
-        return "[Error] no valid image path."
+        return "[Error] no valid file path."
 
     try:
         mime_data = QMimeData()
@@ -236,7 +236,7 @@ def _copyFilesToClipboard(paths, isCut=False):
         Clipboard.setMimeData(mime_data)
         return f"[Success] {len(urls)}"
     except Exception as e:
-        return f"[Error] can't copy images: {e}"
+        return f"[Error] can't copy files: {e}"
 
 
 def copyImages(paths):
@@ -292,7 +292,7 @@ def _moveToTrash(path):
 def deleteImages(paths):
     paths = _toLocalPaths(paths)
     if len(paths) <= 0:
-        return {"ok": False, "deleted": [], "failed": [], "message": "[Error] no image path."}
+        return {"ok": False, "deleted": [], "failed": [], "message": "[Error] no file path."}
 
     deleted = []
     failed = []
@@ -308,8 +308,7 @@ def deleteImages(paths):
 
     ok = len(failed) == 0
     message = f"[Success] {len(deleted)}" if ok else (
-        f"[Error] moved {len(deleted)} files to trash, failed {len(failed)}:\n"
-        + "\n".join(failed)
+        f"[Error] moved {len(deleted)} files to trash, failed {len(failed)}."
     )
     return {"ok": ok, "deleted": deleted, "failed": failed, "message": message}
 

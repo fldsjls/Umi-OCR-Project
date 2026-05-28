@@ -69,6 +69,7 @@ Rectangle {
         // 图标
         Rectangle {
             id: iconRect
+            visible: type !== "error"
             width: size_.line*3
             height: size_.line*3
             anchors.horizontalCenter: parent.horizontalCenter
@@ -81,15 +82,6 @@ Rectangle {
                 anchors.centerIn: parent
                 color: theme[iconColorKey]
                 icon: msgRoot.icon
-            }
-            MouseArea {
-                anchors.fill: parent
-                visible: type === "error"
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if(typeof onClosed === "function")
-                        onClosed(false)
-                }
             }
         }
         // 标题
@@ -224,18 +216,34 @@ Rectangle {
         }
     }
 
-    IconButton {
+    Rectangle {
+        visible: type === "error"
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: size_.smallSpacing
-        width: size_.line
-        height: size_.line
-        icon_: "clear"
-        color: theme.subTextColor
-        toolTip: qsTr("关闭")
-        onClicked: {
-            if(typeof onClosed === "function")
-                onClosed(false)
+        width: size_.line*2
+        height: size_.line*2
+        color: theme[iconBgColorKey]
+        radius: 99999
+
+        Icon_ {
+            anchors.fill: parent
+            anchors.margins: parent.height*0.2
+            icon: "no"
+            color: theme.noColor
+        }
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if(typeof onClosed === "function")
+                    onClosed(false)
+            }
+            ToolTip_ {
+                visible: parent.containsMouse
+                text: qsTr("关闭")
+            }
         }
     }
 

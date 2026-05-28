@@ -58,6 +58,11 @@ TabPage {
         }
         previewImage.show(row.path, data, row.text)
     }
+    function deleteSearchRecords(paths) {
+        const res = tabPage.callPy("deleteRecords", paths)
+        Qt.callLater(searchNow)
+        return res
+    }
 
     Panel {
         anchors.fill: parent
@@ -129,6 +134,8 @@ TabPage {
             showOpenButton: false
             showClearButton: false
             enableSelection: true
+            deleteRecordsHandler: deleteSearchRecords
+            deleteRecordsText: qsTr("删除记录")
             clearBtnText: qsTr("清空")
             defaultTips: qsTr("暂无结果")
             headers: [

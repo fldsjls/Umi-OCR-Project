@@ -56,6 +56,8 @@ Item {
     property int dragStartRow: -1
     property int dragModifiers: 0
     property var dragBaseRows: ({})
+    property var deleteRecordsHandler: undefined
+    property string deleteRecordsText: qsTr("删除记录（仅列表）")
 
 
     // ========================= 【调用接口】 =========================
@@ -423,8 +425,11 @@ Item {
             res = qmlapp.imageManager.copyImage(paths[0])
         if(res && res.startsWith("[Success]"))
         {
-            if(isCut)
+            if(isCut) {
+                if(!deleteRecordsFromIndex(paths))
+                    return
                 removeRowsByIndexes(rows)
+            }
             qmlapp.popup.simple(isCut ? qsTr("文件：剪切%1个").arg(paths.length) : qsTr("文件：复制%1个").arg(paths.length), "")
         }
         else
@@ -446,6 +451,29 @@ Item {
         rebuildDataDict()
         clearSelection()
         updateWidth()
+    }
+    function deleteRecordsFromIndex(paths) {
+        if(typeof deleteRecordsHandler !== "function")
+            return true
+        const res = deleteRecordsHandler(paths)
+        if(res && res.ok === false) {
+            const msg = res.message ? res.message : qsTr("删除索引记录失败")
+            qmlapp.popup.simple(qsTr("删除记录失败"), msg)
+            return false
+        }
+        return true
+    }
+    function removeSelectedRecords() {
+        const rows = selectedIndexes()
+        if(rows.length <= 0) {
+            qmlapp.popup.simple(qsTr("记录：无选中记录"), "")
+            return
+        }
+        const paths = selectedImagePaths()
+        if(!deleteRecordsFromIndex(paths))
+            return
+        removeRowsByIndexes(rows)
+        qmlapp.popup.simple(qsTr("记录：删除%1条").arg(rows.length), "")
     }
     function deleteSelectedFiles() {
         const rows = selectedIndexes()
@@ -469,7 +497,7 @@ Item {
             }
             else {
                 const msg = res && res.message ? res.message : String(res)
-                qmlapp.popup.message(qsTr("删除文件失败"), msg, "error")
+                qmlapp.popup.simple(qsTr("删除文件失败"), msg)
             }
         }
         qmlapp.popup.dialog(
@@ -1058,6 +1086,7 @@ Item {
                 menuList: [
                     [copySelectedImages, qsTr("复制文件（Ctrl+C）")],
                     [cutSelectedFiles, qsTr("剪切文件（Ctrl+X）")],
+                    [removeSelectedRecords, deleteRecordsText],
                     [deleteSelectedFiles, qsTr("删除文件（Delete）"), "noColor"],
                 ]
             }

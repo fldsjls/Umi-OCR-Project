@@ -126,6 +126,27 @@ class OcrIndexClass:
         except Exception:
             logger.error("Failed to delete OCR search index item.", exc_info=True)
 
+    def delete_many(self, paths):
+        if hasattr(paths, "toVariant"):
+            paths = paths.toVariant()
+        if not isinstance(paths, (list, tuple)):
+            paths = [paths]
+        normalized = [os.path.abspath(path) for path in paths if path]
+        if not normalized:
+            return {"ok": False, "deleted": 0, "message": "[Error] no record path."}
+        try:
+            with self._connect() as conn:
+                before = conn.total_changes
+                conn.executemany(
+                    "DELETE FROM ocr_images WHERE path = ?",
+                    [(path,) for path in normalized],
+                )
+                deleted = conn.total_changes - before
+            return {"ok": True, "deleted": deleted}
+        except Exception:
+            logger.error("Failed to delete OCR search index items.", exc_info=True)
+            return {"ok": False, "deleted": 0, "message": "[Error] failed to delete index records."}
+
     def search(self, keyword="", limit=200):
         keyword = (keyword or "").strip()
         limit = max(1, min(int(limit or 200), 1000))
