@@ -386,20 +386,18 @@ Item {
     function copySelectedImages() {
         const paths = selectedImagePaths()
         if(paths.length <= 0) {
-            qmlapp.popup.simple(qsTr("图片：无选中图片"), "")
+            qmlapp.popup.simple(qsTr("文件：无选中文件"), "")
             return
         }
         let res = ""
-        if(paths.length === 1)
-            res = qmlapp.imageManager.copyImage(paths[0])
-        else if(qmlapp.imageManager.copyImages)
+        if(qmlapp.imageManager.copyImages)
             res = qmlapp.imageManager.copyImages(paths)
         else
             res = qmlapp.imageManager.copyImage(paths[0])
         if(res && res.startsWith("[Success]"))
-            qmlapp.popup.simple(qsTr("图片：复制%1张").arg(paths.length), "")
+            qmlapp.popup.simple(qsTr("文件：复制%1个").arg(paths.length), "")
         else
-            qmlapp.popup.simple(qsTr("复制图片失败"), res)
+            qmlapp.popup.simple(qsTr("复制文件失败"), res)
     }
     function activateRow(row) {
         if(row < 0 || row >= rowCount)
@@ -419,6 +417,12 @@ Item {
             return -1
         const row = Math.floor((tableView.contentY + y) / tableRowStep())
         return Math.max(0, Math.min(rowCount - 1, row))
+    }
+    function isPointOnTableRow(y) {
+        if(rowCount <= 0 || y < 0)
+            return false
+        const contentBottom = rowCount * tableRowStep() - tableView.contentY - tableView.rowSpacing
+        return y < contentBottom
     }
     function clampTablePoint(point) {
         return {
@@ -478,6 +482,37 @@ Item {
         dragBaseRows = copySelectionMap(selectedRows)
         dragSelectMoved = false
         dragSelecting = false
+    }
+    function handleSelectionAreaPressed(item, mouse) {
+        if(!enableSelection) {
+            mouse.accepted = false
+            return
+        }
+        forceActiveFocus()
+        if(!isPointOnTableRow(mouse.y)) {
+            if(mouse.button === Qt.LeftButton && !(mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)))
+                clearSelection()
+            dragSelecting = false
+            dragSelectMoved = false
+            dragStartRow = -1
+            return
+        }
+        handleSelectionPressed(rowAtTableY(mouse.y), item, mouse)
+    }
+    function handleSelectionAreaMoved(item, mouse) {
+        if(!enableSelection || dragStartRow < 0)
+            return
+        handleSelectionMoved(item, mouse)
+    }
+    function handleSelectionAreaClicked(mouse) {
+        if(!enableSelection || !isPointOnTableRow(mouse.y))
+            return
+        handleSelectionClicked(rowAtTableY(mouse.y), mouse)
+    }
+    function handleSelectionAreaDoubleClicked(mouse) {
+        if(!enableSelection || !isPointOnTableRow(mouse.y))
+            return
+        handleSelectionDoubleClicked(rowAtTableY(mouse.y), mouse)
     }
     function handleSelectionMoved(item, mouse) {
         if(!enableSelection || dragStartRow < 0)
@@ -796,7 +831,23 @@ Item {
                     }
                 }
                 // 滚动条
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar { id: tableScrollBar }
+            }
+            MouseArea {
+                id: tableSelectionArea
+                anchors.top: tableView.top
+                anchors.left: tableView.left
+                anchors.right: tableView.right
+                anchors.bottom: tableView.bottom
+                anchors.rightMargin: tableScrollBar.visible ? tableScrollBar.width : 0
+                z: 10
+                acceptedButtons: enableSelection ? (Qt.LeftButton | Qt.RightButton) : Qt.NoButton
+                preventStealing: true
+                onPressed: handleSelectionAreaPressed(tableSelectionArea, mouse)
+                onPositionChanged: handleSelectionAreaMoved(tableSelectionArea, mouse)
+                onReleased: handleSelectionReleased()
+                onClicked: handleSelectionAreaClicked(mouse)
+                onDoubleClicked: handleSelectionAreaDoubleClicked(mouse)
             }
             Item {
                 anchors.fill: tableView

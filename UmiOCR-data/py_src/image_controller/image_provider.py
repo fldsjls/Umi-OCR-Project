@@ -7,6 +7,7 @@ from uuid import uuid4  # 唯一ID
 from urllib.parse import unquote
 from PySide2.QtCore import Qt, QByteArray, QBuffer, QUrl, QMimeData
 from PySide2.QtGui import QPixmap, QImage, QPainter, QClipboard
+from PySide2.QtQml import QJSValue
 from PySide2.QtQuick import QQuickImageProvider
 
 from umi_log import logger
@@ -180,16 +181,23 @@ def copyImage(path):
 
 
 def copyImages(paths):
-    if not isinstance(paths, (list, tuple)):
+    if isinstance(paths, QJSValue):
+        paths = paths.toVariant()
+    if isinstance(paths, str):
+        paths = [paths]
+    elif not isinstance(paths, (list, tuple)):
         try:
             paths = list(paths)
         except TypeError:
             paths = [paths]
-    paths = [unquote(str(p)) for p in paths if p]
+    paths = [p.toVariant() if isinstance(p, QJSValue) else p for p in paths if p]
+    paths = [
+        unquote(p.toLocalFile() if isinstance(p, QUrl) and p.isLocalFile() else str(p))
+        for p in paths
+        if p
+    ]
     if len(paths) <= 0:
         return "[Error] no image path."
-    if len(paths) == 1:
-        return copyImage(paths[0])
 
     urls = []
     valid_paths = []
