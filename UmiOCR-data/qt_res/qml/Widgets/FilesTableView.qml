@@ -412,10 +412,12 @@ Item {
     function tableRowStep() {
         return Math.max(1, size_.smallLine * 1.5 + tableView.rowSpacing)
     }
-    function rowAtTableY(y) {
+    function rowAtTableY(y, clamp=true) {
         if(rowCount <= 0)
             return -1
         const row = Math.floor((tableView.contentY + y) / tableRowStep())
+        if(!clamp && (row < 0 || row >= rowCount))
+            return -1
         return Math.max(0, Math.min(rowCount - 1, row))
     }
     function isPointOnTableRow(y) {
@@ -442,6 +444,29 @@ Item {
         selectedRows = next
         lastSelectedIndex = currentRow
         anchorIndex = dragStartRow
+        bumpSelectionUpdate()
+    }
+    function selectDragRectRows(fromY, toY) {
+        if(rowCount <= 0)
+            return
+        const keepExisting = (dragModifiers & Qt.ControlModifier) !== 0
+        const next = keepExisting ? copySelectionMap(dragBaseRows) : {}
+        const step = tableRowStep()
+        const rectTop = tableView.contentY + Math.min(fromY, toY)
+        const rectBottom = tableView.contentY + Math.max(fromY, toY)
+        const contentTop = 0
+        const contentBottom = rowCount * step
+        const overlapTop = Math.max(contentTop, rectTop)
+        const overlapBottom = Math.min(contentBottom, rectBottom)
+        if(overlapTop < overlapBottom) {
+            const firstRow = Math.max(0, Math.floor(overlapTop / step))
+            const lastRow = Math.min(rowCount - 1, Math.floor((overlapBottom - 0.001) / step))
+            for(let i = firstRow; i <= lastRow; i++)
+                next[i] = true
+            lastSelectedIndex = lastRow
+            anchorIndex = firstRow
+        }
+        selectedRows = next
         bumpSelectionUpdate()
     }
     function handleSelectionPressed(row, item, mouse) {
@@ -490,11 +515,18 @@ Item {
         }
         forceActiveFocus()
         if(!isPointOnTableRow(mouse.y)) {
-            if(mouse.button === Qt.LeftButton && !(mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)))
+            if(mouse.button !== Qt.LeftButton)
+                return
+            const point = clampTablePoint(item.mapToItem(tableView, mouse.x, mouse.y))
+            if(!(mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)))
                 clearSelection()
-            dragSelecting = false
+            dragStartX = dragCurrentX = point.x
+            dragStartY = dragCurrentY = point.y
+            dragStartRow = rowAtTableY(mouse.y)
+            dragModifiers = mouse.modifiers || 0
+            dragBaseRows = copySelectionMap(selectedRows)
             dragSelectMoved = false
-            dragStartRow = -1
+            dragSelecting = false
             return
         }
         handleSelectionPressed(rowAtTableY(mouse.y), item, mouse)
@@ -527,7 +559,7 @@ Item {
         }
         if(dragSelectMoved) {
             dragSelecting = true
-            selectDragRows(rowAtTableY(dragCurrentY))
+            selectDragRectRows(dragStartY, dragCurrentY)
         }
     }
     function handleSelectionReleased() {
