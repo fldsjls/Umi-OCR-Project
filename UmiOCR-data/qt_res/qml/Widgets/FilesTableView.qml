@@ -94,6 +94,7 @@ Item {
         const key = dataModel.get(i)[headerKey]
         delete dataDict[key]
         dataModel.remove(i)
+        rebuildDataDict()
         return true
     }
     // 删：清空
@@ -185,6 +186,14 @@ Item {
                 copySelectedImages()
                 event.accepted = true
             }
+            else if((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_X) {
+                cutSelectedFiles()
+                event.accepted = true
+            }
+            else if(event.key === Qt.Key_Delete) {
+                deleteSelectedFiles()
+                event.accepted = true
+            }
         }
     }
 
@@ -217,6 +226,14 @@ Item {
         headerModel.setProperty(0, "title", headers[0].title + ` (${rowCount})`)
     }
 
+    function rebuildDataDict() {
+        const next = {}
+        for(let i = 0; i < rowCount; i++) {
+            const key = dataModel.get(i)[headerKey]
+            next[key] = i
+        }
+        dataDict = next
+    }
     function toDisplayString(value) {
         if(value === undefined || value === null)
             return ""
@@ -386,21 +403,82 @@ Item {
         }
         return paths
     }
-    function copySelectedImages() {
+    function selectedFilesClipboard(isCut=false) {
         const paths = selectedImagePaths()
         if(paths.length <= 0) {
             qmlapp.popup.simple(qsTr("文件：无选中文件"), "")
             return
         }
         let res = ""
-        if(qmlapp.imageManager.copyImages)
+        if(isCut && !qmlapp.imageManager.cutImages) {
+            qmlapp.popup.simple(qsTr("剪切文件失败"), qsTr("当前版本不支持剪切文件"))
+            return
+        }
+        if(isCut && qmlapp.imageManager.cutImages)
+            res = qmlapp.imageManager.cutImages(paths)
+        else if(qmlapp.imageManager.copyImages)
             res = qmlapp.imageManager.copyImages(paths)
         else
             res = qmlapp.imageManager.copyImage(paths[0])
         if(res && res.startsWith("[Success]"))
-            qmlapp.popup.simple(qsTr("文件：复制%1个").arg(paths.length), "")
+            qmlapp.popup.simple(isCut ? qsTr("文件：剪切%1个").arg(paths.length) : qsTr("文件：复制%1个").arg(paths.length), "")
         else
-            qmlapp.popup.simple(qsTr("复制文件失败"), res)
+            qmlapp.popup.simple(isCut ? qsTr("剪切文件失败") : qsTr("复制文件失败"), res)
+    }
+    function copySelectedImages() {
+        selectedFilesClipboard(false)
+    }
+    function cutSelectedFiles() {
+        selectedFilesClipboard(true)
+    }
+    function removeRowsByIndexes(rows) {
+        rows.sort(function(a, b){ return b - a })
+        for(let i = 0; i < rows.length; i++) {
+            const row = rows[i]
+            if(row >= 0 && row < rowCount)
+                dataModel.remove(row)
+        }
+        rebuildDataDict()
+        clearSelection()
+        updateWidth()
+    }
+    function deleteSelectedFiles() {
+        const rows = selectedIndexes()
+        const paths = selectedImagePaths()
+        if(paths.length <= 0) {
+            qmlapp.popup.simple(qsTr("文件：无选中文件"), "")
+            return
+        }
+        if(!qmlapp.imageManager.deleteImages) {
+            qmlapp.popup.simple(qsTr("删除文件失败"), qsTr("当前版本不支持删除文件"))
+            return
+        }
+        const callback = function(value) {
+            if(!value)
+                return
+            const res = qmlapp.imageManager.deleteImages(paths)
+            if(res && res.ok) {
+                removeRowsByIndexes(rows)
+                const n = res.deleted ? res.deleted.length : paths.length
+                qmlapp.popup.simple(qsTr("文件：删除%1个").arg(n), "")
+            }
+            else {
+                const msg = res && res.message ? res.message : String(res)
+                qmlapp.popup.message(qsTr("删除文件失败"), msg, "error")
+            }
+        }
+        qmlapp.popup.dialog(
+            "",
+            qsTr("要将选中的%1个文件移到回收站吗？").arg(paths.length),
+            callback,
+            "warning",
+            {"yesText": qsTr("删除")}
+        )
+    }
+    function popupSelectionMenu() {
+        if(selectedImagePaths().length <= 0)
+            return
+        selectionMenu.popup()
     }
     function activateRow(row) {
         if(row < 0 || row >= rowCount)
@@ -613,7 +691,7 @@ Item {
         if(!enableSelection || row < 0 || row >= rowCount)
             return
         if(mouse.button === Qt.RightButton)
-            copySelectedImages()
+            popupSelectionMenu()
     }
     function handleSelectionDoubleClicked(row, mouse) {
         if(!enableSelection || row < 0 || row >= rowCount)
@@ -969,6 +1047,14 @@ Item {
                     border.width: 1
                     border.color: theme.coverColor4
                 }
+            }
+            Menu_ {
+                id: selectionMenu
+                menuList: [
+                    [copySelectedImages, qsTr("复制文件（Ctrl+C）")],
+                    [cutSelectedFiles, qsTr("剪切文件（Ctrl+X）")],
+                    [deleteSelectedFiles, qsTr("删除文件（Delete）"), "noColor"],
+                ]
             }
         }
 

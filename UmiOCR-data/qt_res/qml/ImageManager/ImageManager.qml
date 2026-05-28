@@ -17,6 +17,8 @@ Item {
     // 复制图片
     readonly property var copyImage: imageConnector.copyImage
     readonly property var copyImages: imageConnector.copyImages
+    readonly property var cutImages: imageConnector.cutImages
+    readonly property var deleteImages: imageConnector.deleteImages
     // 用系统默认应用打开图片
     readonly property var openImage: imageConnector.openImage
     // 保存图片

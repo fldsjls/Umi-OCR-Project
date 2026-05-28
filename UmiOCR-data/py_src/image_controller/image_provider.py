@@ -3,9 +3,11 @@
 # ==========================================================
 
 import os
+import struct
+import ctypes
 from uuid import uuid4  # 唯一ID
 from urllib.parse import unquote
-from PySide2.QtCore import Qt, QByteArray, QBuffer, QUrl, QMimeData
+from PySide2.QtCore import Qt, QByteArray, QBuffer, QUrl, QMimeData, QFile
 from PySide2.QtGui import QPixmap, QImage, QPainter, QClipboard
 from PySide2.QtQml import QJSValue
 from PySide2.QtQuick import QQuickImageProvider
@@ -180,7 +182,7 @@ def copyImage(path):
         return f"[Error] can't copy: {e}\n{path}"
 
 
-def copyImages(paths):
+def _toLocalPaths(paths):
     if isinstance(paths, QJSValue):
         paths = paths.toVariant()
     if isinstance(paths, str):
@@ -191,20 +193,27 @@ def copyImages(paths):
         except TypeError:
             paths = [paths]
     paths = [p.toVariant() if isinstance(p, QJSValue) else p for p in paths if p]
-    paths = [
-        unquote(p.toLocalFile() if isinstance(p, QUrl) and p.isLocalFile() else str(p))
-        for p in paths
-        if p
-    ]
+    local_paths = []
+    for p in paths:
+        if isinstance(p, QUrl) and p.isLocalFile():
+            path = p.toLocalFile()
+        else:
+            path = unquote(str(p))
+        if path.startswith("file:///"):
+            path = path[8:]
+        if path:
+            local_paths.append(os.path.abspath(path))
+    return local_paths
+
+
+def _copyFilesToClipboard(paths, isCut=False):
+    paths = _toLocalPaths(paths)
     if len(paths) <= 0:
         return "[Error] no image path."
 
     urls = []
     valid_paths = []
     for path in paths:
-        if path.startswith("file:///"):
-            path = path[8:]
-        path = os.path.abspath(path)
         if os.path.exists(path):
             urls.append(QUrl.fromLocalFile(path))
             valid_paths.append(path)
@@ -216,10 +225,88 @@ def copyImages(paths):
         mime_data = QMimeData()
         mime_data.setUrls(urls)
         mime_data.setText("\n".join(valid_paths))
+        drop_effect = 2 if isCut else 1
+        drop_data = QByteArray(struct.pack("<I", drop_effect))
+        mime_data.setData("Preferred DropEffect", drop_data)
+        mime_data.setData(
+            'application/x-qt-windows-mime;value="Preferred DropEffect"',
+            drop_data,
+        )
         Clipboard.setMimeData(mime_data)
         return f"[Success] {len(urls)}"
     except Exception as e:
         return f"[Error] can't copy images: {e}"
+
+
+def copyImages(paths):
+    return _copyFilesToClipboard(paths, False)
+
+
+def cutImages(paths):
+    return _copyFilesToClipboard(paths, True)
+
+
+def _moveToTrashWin(path):
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", ctypes.c_void_p),
+            ("wFunc", ctypes.c_uint),
+            ("pFrom", ctypes.c_wchar_p),
+            ("pTo", ctypes.c_wchar_p),
+            ("fFlags", ctypes.c_uint16),
+            ("fAnyOperationsAborted", ctypes.c_bool),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", ctypes.c_wchar_p),
+        ]
+
+    op = SHFILEOPSTRUCTW()
+    op.wFunc = 3  # FO_DELETE
+    op.pFrom = path + "\0\0"
+    op.fFlags = 0x0040 | 0x0010 | 0x0400  # FOF_ALLOWUNDO | NOCONFIRMATION | NOERRORUI
+    res = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    return res == 0 and not op.fAnyOperationsAborted
+
+
+def _moveToTrash(path):
+    if hasattr(QFile, "moveToTrash"):
+        try:
+            res = QFile.moveToTrash(path)
+            ok = res[0] if isinstance(res, tuple) else res
+            if ok:
+                return True
+        except Exception:
+            logger.error(f"Failed to move file to trash by QFile: {path}", exc_info=True)
+    if os.name == "nt":
+        try:
+            return _moveToTrashWin(path)
+        except Exception:
+            logger.error(f"Failed to move file to trash by shell: {path}", exc_info=True)
+    return False
+
+
+def deleteImages(paths):
+    paths = _toLocalPaths(paths)
+    if len(paths) <= 0:
+        return {"ok": False, "deleted": [], "failed": [], "message": "[Error] no image path."}
+
+    deleted = []
+    failed = []
+    for path in paths:
+        if not os.path.exists(path):
+            failed.append(path)
+            continue
+        ok = _moveToTrash(path)
+        if ok:
+            deleted.append(path)
+        else:
+            failed.append(path)
+
+    ok = len(failed) == 0
+    message = f"[Success] {len(deleted)}" if ok else (
+        f"[Error] moved {len(deleted)} files to trash, failed {len(failed)}:\n"
+        + "\n".join(failed)
+    )
+    return {"ok": ok, "deleted": deleted, "failed": failed, "message": message}
 
 
 # 用系统默认应用打开图片
